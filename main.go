@@ -2,13 +2,11 @@ package main
 
 import (
 	"fmt"
-	"github.com/IBM/sarama"
 	"github.com/go-ini/ini"
 	"github.com/sirupsen/logrus"
+	"log_collection/etcd"
 	"log_collection/kafka"
 	"log_collection/tailfile"
-	"strings"
-	"time"
 )
 
 // 日志收集的客户端
@@ -18,6 +16,12 @@ import (
 type Config struct {
 	KafkaConfig   `ini:"kafka"` // ini标签的值要和config.ini中的节相同
 	CollectConfig `ini:"collect"`
+	EtcdConfig    `ini:"etcd"`
+}
+
+type EtcdConfig struct {
+	Address    string `ini:"address"`
+	CollectKey string `ini:"collect_key"`
 }
 
 type KafkaConfig struct {
@@ -30,37 +34,8 @@ type CollectConfig struct {
 	LogFilePath string `ini:"logfile_path"`
 }
 
-// 真正的业务逻辑
-func run() (err error) {
-	// TailObj --> log --> Client --> kafka
-
-	for true {
-		line, ok := <-tailfile.TailObj.Lines
-		if !ok {
-			logrus.Warning("tail file close reopen, filename:%s\n", tailfile.TailObj.Filename)
-			time.Sleep(time.Second)
-			continue
-		}
-		// 如果是空行，略过
-		fmt.Println(line.Text)
-		if len(strings.Trim(line.Text, "\r")) == 0 {
-			logrus.Info("出现空行，跳过..")
-			continue
-		}
-		// 将日志发送到kafka
-		// 利用通道，将同步的代码改为异步的
-		// 把读出来的一行日志，包装成kafka里的msg类型，丢到通道中
-		msg := &sarama.ProducerMessage{}
-		msg.Topic = "web_log"
-		msg.Value = sarama.StringEncoder(line.Text)
-		// 丢到管道中:为什么要丢到通道里，而不是直接调用client.SendMessage(msg)
-		// 因为如果直接调用SendMessage的话，相当于for循环里，取一行日志，然后往kafka中发送一次。当数据量比较大的时候，for循环压力比较大
-		// 通过一个通道，把日志包装成msg。设计Channel时，不是直接使用String,而是使用内存地址。占用空间比较小，可以开更多的channel.
-		// 这里暴露了整个Channel, 但是只希望将消息发送到通道中，而消息的读取是消费者读kafka实现的，而不是读Channel，所以MsgChan最好是私有的.可以写一个函数返回msgChan
-		//kafka.MsgChan <- msg
-		kafka.ToMsgChan(msg) // 这里的ToMsgChan被封装成了函数
-	}
-	return
+func run() {
+	select {}
 }
 
 func main() {
@@ -72,6 +47,7 @@ func main() {
 		logrus.Error("load config failed, err: %v", err)
 		return
 	}
+	// 打印配置信息
 	// "%#v" 这个格式字符串，它用于打印 Go 语言的值的 Go 语法表示形式。具体而言，%#v 会以 Go 语法格式输出变量的值，包括类型信息和字段名（如果是结构体）。
 	fmt.Printf("%#v\n", configObj)
 	// 1. 初始化（做好准备工作） 连接kafka，检查tail连接是否正常  连接kafka,初始化msgChan,启后台goroutine往kafka发msg
@@ -81,9 +57,23 @@ func main() {
 		return
 	}
 	logrus.Info("init kafka success!")
+	// 优化： 初始化etcd连接，从etcd中拉取要收集日志的配置项
+	err = etcd.Init([]string{configObj.EtcdConfig.Address})
+	if err != nil {
+		logrus.Errorf("init etcd failed, err:%v", err)
+		return
+	}
+	// 从etcd中拉取要收集日志的配置项
+	allConf, err := etcd.GetConf(configObj.EtcdConfig.CollectKey)
+	if err != nil {
+		logrus.Errorf("get conf from etcd failed, err:%v", err)
+	}
+	fmt.Println(allConf)
+
 	// 2. 根据配置中的日志路径，创建对应的tailobj，使用tail去收集日志
 	// 从结构体中加载对象
-	err = tailfile.Init(configObj.CollectConfig.LogFilePath)
+	// 将从etcd中获取的配置项
+	err = tailfile.Init(allConf)
 	if err != nil {
 		logrus.Error("init tailfile failed, err:%v", err)
 		return
@@ -91,9 +81,6 @@ func main() {
 	logrus.Info("init tailfile success!")
 	// 3. 把日志通过sarama发往kafka
 	// 从tailobj.lines中一行行读日志，包装成kafka msg,丢到MsgChan中
-	err = run()
-	if err != nil {
-		logrus.Error("run failed, err: %v", err)
-		return
-	}
+	run()
+
 }

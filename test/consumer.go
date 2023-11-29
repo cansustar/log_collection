@@ -6,7 +6,7 @@ import (
 	"sync"
 )
 
-func main() {
+func consumer_test() {
 	consumer, err := sarama.NewConsumer([]string{"127.0.0.1:9092"}, nil)
 	if err != nil {
 		fmt.Printf("fail to start consumer, err:%v\n", err)
