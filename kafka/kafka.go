@@ -27,7 +27,7 @@ func Init(address []string, chanSize int64) (err error) {
 		logrus.Error("kafka: producer closed, err:", err)
 		return
 	}
-	// 初始化msgChan
+	// 初始化msgChan, 存放日志数据的channel，实现了将读日志与发送日志异步执行
 	msgChan = make(chan *sarama.ProducerMessage, chanSize)
 	// 初始化时，起一个后台的goroutine，从msgChan中读取数据,发送到kafka
 	go sendMsg()

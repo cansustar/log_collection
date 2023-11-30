@@ -69,7 +69,9 @@ func main() {
 		logrus.Errorf("get conf from etcd failed, err:%v", err)
 	}
 	fmt.Println(allConf)
-
+	// 派一个小弟去监控etcd中，configObj.EtcdConfig.CollectKey 对应值的变化
+	// 启动一个goroutine监控etcd中key的value的变化
+	go etcd.WatchConf(configObj.EtcdConfig.CollectKey)
 	// 2. 根据配置中的日志路径，创建对应的tailobj，使用tail去收集日志
 	// 从结构体中加载对象
 	// 将从etcd中获取的配置项
