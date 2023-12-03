@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"github.com/go-ini/ini"
 	"github.com/sirupsen/logrus"
+	"log_collection/common"
 	"log_collection/etcd"
 	"log_collection/kafka"
+	sysinfo "log_collection/sys_info"
 	"log_collection/tailfile"
 )
 
@@ -39,10 +41,15 @@ func run() {
 }
 
 func main() {
+	// -1 获取本机ip,为后续去etcd获取配置文件打下基础
+	ip, err := common.GetOutboundIP()
+	if err != nil {
+		logrus.Errorf("get ip failed, err:%v", err)
+	}
 	// 0. 读配置文件 go-ini， 加载kafka和collect的配置项
 	// 下面要用反射给结构体赋值，要改变结构体变量的值，go中函数传参都是拷贝，用new，可以得到一个结构体指针
 	var configObj = new(Config)
-	err := ini.MapTo(configObj, "./conf/config.ini")
+	err = ini.MapTo(configObj, "./conf/config.ini")
 	if err != nil {
 		logrus.Error("load config failed, err: %v", err)
 		return
@@ -50,6 +57,9 @@ func main() {
 	// 打印配置信息
 	// "%#v" 这个格式字符串，它用于打印 Go 语言的值的 Go 语法表示形式。具体而言，%#v 会以 Go 语法格式输出变量的值，包括类型信息和字段名（如果是结构体）。
 	fmt.Printf("%#v\n", configObj)
+	// TODO: 根据config.ini中的配置项，初始化日志库，主要初始化的是org和bucket
+	// 启动系统信息收集模块
+	go sysinfo.CollectSysInfo()
 	// 1. 初始化（做好准备工作） 连接kafka，检查tail连接是否正常  连接kafka,初始化msgChan,启后台goroutine往kafka发msg
 	err = kafka.Init([]string{configObj.KafkaConfig.Address}, configObj.KafkaConfig.ChanSize)
 	if err != nil {
@@ -64,14 +74,16 @@ func main() {
 		return
 	}
 	// 从etcd中拉取要收集日志的配置项
-	allConf, err := etcd.GetConf(configObj.EtcdConfig.CollectKey)
+	// 将ip拼接到key中
+	CollectKey := fmt.Sprintf(configObj.EtcdConfig.CollectKey, ip)
+	allConf, err := etcd.GetConf(CollectKey)
 	if err != nil {
 		logrus.Errorf("get conf from etcd failed, err:%v", err)
 	}
 	fmt.Println(allConf)
 	// 派一个小弟去监控etcd中，configObj.EtcdConfig.CollectKey 对应值的变化
 	// 启动一个goroutine监控etcd中key的value的变化
-	go etcd.WatchConf(configObj.EtcdConfig.CollectKey)
+	go etcd.WatchConf(CollectKey)
 	// 2. 根据配置中的日志路径，创建对应的tailobj，使用tail去收集日志
 	// 从结构体中加载对象
 	// 将从etcd中获取的配置项
@@ -83,6 +95,7 @@ func main() {
 	logrus.Info("init tailfile success!")
 	// 3. 把日志通过sarama发往kafka
 	// 从tailobj.lines中一行行读日志，包装成kafka msg,丢到MsgChan中
+	// 避免退出
 	run()
 
 }

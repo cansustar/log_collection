@@ -52,7 +52,7 @@ func GetConf(key string) (collectEntryList []common.CollectEntry, err error) {
 	return
 }
 
-// 监控etcd中日志收集项配置变化的函数
+// WatchConf 监控etcd中日志收集项配置变化的函数
 func WatchConf(key string) {
 	for {
 		wCh := client.Watch(context.Background(), key)
