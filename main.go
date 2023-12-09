@@ -56,7 +56,7 @@ func main() {
 	}
 	// 打印配置信息
 	// "%#v" 这个格式字符串，它用于打印 Go 语言的值的 Go 语法表示形式。具体而言，%#v 会以 Go 语法格式输出变量的值，包括类型信息和字段名（如果是结构体）。
-	fmt.Printf("%#v\n", configObj)
+	logrus.Infof("current config is: %#v\n", configObj)
 	// TODO: 根据config.ini中的配置项，初始化日志库，主要初始化的是org和bucket
 	// 启动系统信息收集模块
 	go sysinfo.CollectSysInfo()
@@ -76,11 +76,12 @@ func main() {
 	// 从etcd中拉取要收集日志的配置项
 	// 将ip拼接到key中
 	CollectKey := fmt.Sprintf(configObj.EtcdConfig.CollectKey, ip)
-	allConf, err := etcd.GetConf(CollectKey)
+	allConf, err := etcd.GetConf("collect_log_conf")
 	if err != nil {
 		logrus.Errorf("get conf from etcd failed, err:%v", err)
 	}
-	fmt.Println(allConf)
+	// 将当前配置，+当前时间保存到日志中
+	logrus.Infof("get conf from etcd success, %v", allConf)
 	// 派一个小弟去监控etcd中，configObj.EtcdConfig.CollectKey 对应值的变化
 	// 启动一个goroutine监控etcd中key的value的变化
 	go etcd.WatchConf(CollectKey)

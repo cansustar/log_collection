@@ -2,12 +2,12 @@ package sysinfo
 
 import (
 	"context"
-	"fmt"
 	"github.com/influxdata/influxdb-client-go/v2/api/write"
 	"github.com/shirou/gopsutil/cpu"
 	"github.com/shirou/gopsutil/disk"
 	"github.com/shirou/gopsutil/mem"
 	"github.com/shirou/gopsutil/net"
+	"github.com/sirupsen/logrus"
 	"log"
 	"time"
 
@@ -80,7 +80,6 @@ func WritesPoints(info DataInfo) {
 			if err := writeAPI.WritePoint(context.Background(), point); err != nil {
 				log.Fatal(err)
 			}
-			fmt.Println(info.Measurement, "insert success")
 		}
 		writeToDB = false
 	case NetInfo:
@@ -100,7 +99,6 @@ func WritesPoints(info DataInfo) {
 			if err := writeAPI.WritePoint(context.Background(), point); err != nil {
 				log.Fatal(err)
 			}
-			fmt.Println(info.Measurement, "insert success")
 		}
 		writeToDB = false
 
@@ -112,7 +110,6 @@ func WritesPoints(info DataInfo) {
 		if err := writeAPI.WritePoint(context.Background(), point); err != nil {
 			log.Fatal(err)
 		}
-		fmt.Println(info.Measurement, "insert success")
 	}
 }
 
@@ -122,7 +119,6 @@ func getCpuInfo() {
 	info.Measurement = "device_cpu_info"
 	var cpuInfo CpuInfo
 	cpuInfo.CpuPercent = percent[0]
-	println(cpuInfo.CpuPercent)
 	info.Data = cpuInfo
 	WritesPoints(info)
 }
@@ -135,7 +131,7 @@ func getMemInfo() {
 	data, err := mem.VirtualMemory()
 
 	if err != nil {
-		fmt.Printf("get mem info failed, err:%v", err)
+		logrus.Errorf("get mem info failed, err:%v", err)
 		return
 	}
 
@@ -159,7 +155,7 @@ func getDiskInfo() {
 	// partitions中的是每一个分区的信息
 	partitions, err := disk.Partitions(true)
 	if err != nil {
-		fmt.Printf("get partitions failed, err:%v", err)
+		logrus.Errorf("get partitions failed, err:%v", err)
 		return
 	}
 	// 遍历每一个分区，获取每一个分区的信息
@@ -168,7 +164,7 @@ func getDiskInfo() {
 		// 挂载点是指将外部设备（如U盘、移动硬盘等）与计算机的文件系统进行连接的一个目录
 		usageStat, err := disk.Usage(partition.Mountpoint)
 		if err != nil {
-			fmt.Printf("get partition %s usage failed, err:%v", partition.Mountpoint, err)
+			logrus.Errorf("get partition %s usage failed, err:%v", partition.Mountpoint, err)
 			continue
 		}
 		diskInfo.PartitionUsageStat[usageStat.Path] = usageStat
@@ -182,7 +178,7 @@ func getNetInfo() {
 	info.Measurement = "device_net_info"
 	netIOs, err := net.IOCounters(true)
 	if err != nil {
-		fmt.Printf("get net io counters failed, err:%v", err)
+		logrus.Errorf("get net io counters failed, err:%v", err)
 		return
 	}
 	var netInfo NetInfo

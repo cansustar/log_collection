@@ -2,13 +2,11 @@ package tailfile
 
 import (
 	"context"
-	"fmt"
 	"github.com/IBM/sarama"
 	"github.com/nxadm/tail"
 	"github.com/sirupsen/logrus"
 	"log_collection/common"
 	"log_collection/kafka"
-	"strings"
 	"time"
 )
 
@@ -68,12 +66,6 @@ func (t *tailTask) run() {
 				// 待优化，这里打开文件失败会一直重启
 				logrus.Warningf("tail file close reopen, filename:%s", t.path)
 				time.Sleep(time.Second)
-				continue
-			}
-			// 如果是空行，略过
-			fmt.Println(line.Text)
-			if len(strings.Trim(line.Text, "\r")) == 0 {
-				logrus.Info("出现空行，跳过..")
 				continue
 			}
 			// 将日志发送到kafka

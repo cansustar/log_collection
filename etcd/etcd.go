@@ -3,7 +3,6 @@ package etcd
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"github.com/sirupsen/logrus"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"log_collection/common"
@@ -23,7 +22,7 @@ func Init(address []string) (err error) {
 		DialTimeout: time.Second * 5,
 	})
 	if err != nil {
-		fmt.Printf("connect to etcd failed, err:%v", err)
+		logrus.Errorf("connect to etcd failed, err:%v", err)
 		return
 	}
 	return
@@ -59,7 +58,7 @@ func WatchConf(key string) {
 		for wresp := range wCh {
 			logrus.Info("get a new config")
 			for _, evt := range wresp.Events {
-				fmt.Printf("config change.", "type:%s, key: %s,value: %s\n", evt.Type, evt.Kv.Key, evt.Kv.Value)
+				logrus.Infof("config change, type:%s, key: %s,value: %s\n", evt.Type, evt.Kv.Key, evt.Kv.Value)
 				var newConf []common.CollectEntry // 空的配置切片
 				if evt.Type == clientv3.EventTypeDelete {
 					// 如果是删除事件，
